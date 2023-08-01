@@ -29,6 +29,7 @@
 #include <asm/tlbflush.h>
 #include <asm/sections.h>
 #include <asm/soc.h>
+#include <asm/sbi.h>
 #include <asm/io.h>
 #include <asm/ptdump.h>
 #include <asm/numa.h>
@@ -253,6 +254,8 @@ static void __init setup_bootmem(void)
 	 * in the device tree, otherwise the allocation could end up in a
 	 * reserved region.
 	 */
+
+	sbi_apply_reserved_mem_erratum(dtb_early_va);
 	early_init_fdt_scan_reserved_mem();
 
 	/*

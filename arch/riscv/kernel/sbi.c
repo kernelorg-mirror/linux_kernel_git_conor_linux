@@ -5,8 +5,10 @@
  * Copyright (c) 2020 Western Digital Corporation or its affiliates.
  */
 
+#include <linux/acpi.h>
 #include <linux/bits.h>
 #include <linux/init.h>
+#include <linux/libfdt.h>
 #include <linux/pm.h>
 #include <linux/reboot.h>
 #include <asm/sbi.h>
@@ -583,6 +585,40 @@ long sbi_get_mimpid(void)
 }
 EXPORT_SYMBOL_GPL(sbi_get_mimpid);
 
+static long sbi_firmware_id;
+static long sbi_firmware_version;
+
+/*
+ * For devicetrees patched by OpenSBI a "mmode_resv" node is added to cover
+ * the region OpenSBI has protected by means of a PMP. Some versions of OpenSBI,
+ * [v0.8 to v1.3), omitted the "no-map" property, but this trips up hibernation
+ * among other things.
+ */
+void __init sbi_apply_reserved_mem_erratum(void *dtb_pa)
+{
+	int child, reserved_mem;
+
+	if (sbi_firmware_id != SBI_IMP_OPENSBI)
+		return;
+
+	if (!acpi_disabled)
+		return;
+
+	if (sbi_firmware_version >= 0x10003 || sbi_firmware_version < 0x8)
+		return;
+
+	reserved_mem = fdt_path_offset((void *)dtb_pa, "/reserved-memory");
+	if (reserved_mem < 0)
+		return;
+
+	fdt_for_each_subnode(child, (void *)dtb_pa, reserved_mem) {
+		const char *name = fdt_get_name((void *)dtb_pa, child, NULL);
+
+		if (!strncmp(name, "mmode_resv", 10))
+			fdt_setprop((void *)dtb_pa, child, "no-map", NULL, 0);
+	}
+};
+
 void __init sbi_init(void)
 {
 	int ret;
@@ -596,8 +632,12 @@ void __init sbi_init(void)
 		sbi_major_version(), sbi_minor_version());
 
 	if (!sbi_spec_is_0_1()) {
+		sbi_firmware_id = sbi_get_firmware_id();
+		sbi_firmware_version = sbi_get_firmware_version();
+
 		pr_info("SBI implementation ID=0x%lx Version=0x%lx\n",
-			sbi_get_firmware_id(), sbi_get_firmware_version());
+			sbi_firmware_id, sbi_firmware_version);
+
 		if (sbi_probe_extension(SBI_EXT_TIME)) {
 			__sbi_set_timer = __sbi_set_timer_v02;
 			pr_info("SBI TIME extension detected\n");

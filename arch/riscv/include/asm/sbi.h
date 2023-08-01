@@ -252,6 +252,9 @@ enum sbi_pmu_ctr_type {
 #define SBI_ERR_ALREADY_STARTED -7
 #define SBI_ERR_ALREADY_STOPPED -8
 
+/* SBI implementation IDs */
+#define SBI_IMP_OPENSBI	1
+
 extern unsigned long sbi_spec_version;
 struct sbiret {
 	long error;
@@ -259,6 +262,8 @@ struct sbiret {
 };
 
 void sbi_init(void);
+void sbi_apply_reserved_mem_erratum(void *dtb_va);
+
 struct sbiret sbi_ecall(int ext, int fid, unsigned long arg0,
 			unsigned long arg1, unsigned long arg2,
 			unsigned long arg3, unsigned long arg4,
