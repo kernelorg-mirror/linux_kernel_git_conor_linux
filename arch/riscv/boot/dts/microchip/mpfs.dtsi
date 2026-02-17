@@ -327,6 +327,7 @@
 			interrupts = <90>;
 			current-speed = <115200>;
 			clocks = <&clkcfg CLK_MMUART0>;
+			resets = <&mss_top_sysreg CLK_MMUART0>;
 			status = "disabled"; /* Reserved for the HSS */
 		};
 
@@ -339,6 +340,7 @@
 			interrupts = <91>;
 			current-speed = <115200>;
 			clocks = <&clkcfg CLK_MMUART1>;
+			resets = <&mss_top_sysreg CLK_MMUART1>;
 			status = "disabled";
 		};
 
@@ -351,6 +353,7 @@
 			interrupts = <92>;
 			current-speed = <115200>;
 			clocks = <&clkcfg CLK_MMUART2>;
+			resets = <&mss_top_sysreg CLK_MMUART2>;
 			status = "disabled";
 		};
 
@@ -363,6 +366,7 @@
 			interrupts = <93>;
 			current-speed = <115200>;
 			clocks = <&clkcfg CLK_MMUART3>;
+			resets = <&mss_top_sysreg CLK_MMUART3>;
 			status = "disabled";
 		};
 
@@ -374,6 +378,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <94>;
 			clocks = <&clkcfg CLK_MMUART4>;
+			resets = <&mss_top_sysreg CLK_MMUART4>;
 			current-speed = <115200>;
 			status = "disabled";
 		};
@@ -385,6 +390,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <88>;
 			clocks = <&clkcfg CLK_MMC>;
+			resets = <&mss_top_sysreg CLK_MMC>;
 			max-frequency = <200000000>;
 			status = "disabled";
 		};
@@ -397,6 +403,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <54>;
 			clocks = <&clkcfg CLK_SPI0>;
+			resets = <&mss_top_sysreg CLK_SPI0>;
 			status = "disabled";
 		};
 
@@ -408,6 +415,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <55>;
 			clocks = <&clkcfg CLK_SPI1>;
+			resets = <&mss_top_sysreg CLK_SPI1>;
 			status = "disabled";
 		};
 
@@ -419,6 +427,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <85>;
 			clocks = <&clkcfg CLK_QSPI>;
+			resets = <&mss_top_sysreg CLK_QSPI>;
 			status = "disabled";
 		};
 
@@ -430,6 +439,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <58>;
 			clocks = <&clkcfg CLK_I2C0>;
+			resets = <&mss_top_sysreg CLK_I2C0>;
 			clock-frequency = <100000>;
 			status = "disabled";
 		};
@@ -442,6 +452,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <61>;
 			clocks = <&clkcfg CLK_I2C1>;
+			resets = <&mss_top_sysreg CLK_I2C1>;
 			clock-frequency = <100000>;
 			status = "disabled";
 		};
@@ -505,6 +516,7 @@
 				     <8>, <9>, <10>, <11>,
 				     <12>, <13>;
 			clocks = <&clkcfg CLK_GPIO0>;
+			resets = <&mss_top_sysreg CLK_GPIO0>;
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <14>;
@@ -524,6 +536,7 @@
 				     <48>, <49>, <50>, <51>,
 				     <52>, <53>, <54>, <55>;
 			clocks = <&clkcfg CLK_GPIO1>;
+			resets = <&mss_top_sysreg CLK_GPIO1>;
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <24>;
@@ -545,6 +558,7 @@
 				     <88>, <89>, <90>, <91>,
 				     <92>, <93>, <94>, <95>;
 			clocks = <&clkcfg CLK_GPIO2>;
+			resets = <&mss_top_sysreg CLK_GPIO2>;
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <32>;
@@ -557,6 +571,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <80>, <81>;
 			clocks = <&clkcfg CLK_RTC>, <&clkcfg CLK_RTCREF>;
+			resets = <&mss_top_sysreg CLK_RTC>;
 			clock-names = "rtc", "rtcref";
 			status = "disabled";
 		};
@@ -567,6 +582,7 @@
 			interrupt-parent = <&plic>;
 			interrupts = <86>, <87>;
 			clocks = <&clkcfg CLK_USB>;
+			resets = <&mss_top_sysreg CLK_USB>;
 			interrupt-names = "dma","mc";
 			status = "disabled";
 		};
