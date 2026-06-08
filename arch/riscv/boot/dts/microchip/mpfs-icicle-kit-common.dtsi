@@ -71,6 +71,10 @@
 	};
 };
 
+&can0 {
+	status = "okay";
+};
+
 &core_pwm0 {
 	status = "okay";
 };
