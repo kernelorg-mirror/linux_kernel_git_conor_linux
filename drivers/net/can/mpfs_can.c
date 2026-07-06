@@ -51,7 +51,7 @@
 #define MPFS_CAN_ISR_CRC_ERR_MASK	BIT(8)
 #define MPFS_CAN_ISR_BUS_OFF_MASK	BIT(9)
 #define MPFS_CAN_ISR_TXMSG_SNT_MASK	BIT(11)
-#define MPFS_CAN_ISR_RXMSG_SNT_MASK	BIT(12)
+#define MPFS_CAN_ISR_RXMSG_AVAIL_MASK	BIT(12)
 
 #define MPFS_CAN_ERR_MASK	(MPFS_CAN_ISR_ARB_LOSS_MASK | \
 				 MPFS_CAN_ISR_BIT_ERR_MASK | \
@@ -73,8 +73,7 @@
 #define MPFS_CAN_IER_BUS_OFF_MASK	BIT(9)
 #define MPFS_CAN_IER_RXMSG_LOS_MASK	BIT(10)
 #define MPFS_CAN_IER_TXMSG_SNT_MASK	BIT(11)
-#define MPFS_CAN_IER_RXMSG_SNT_MASK	BIT(12)
-#define MPFS_CAN_IER_RTR_SNT_MASK	BIT(13)
+#define MPFS_CAN_IER_RXMSG_AVAIL_MASK	BIT(12)
 
 #define MPFS_CAN_IER_MASK	(MPFS_CAN_IER_ARB_LOSS_MASK | \
 				 MPFS_CAN_IER_BIT_ERR_MASK | \
@@ -85,8 +84,7 @@
 				 MPFS_CAN_IER_BUS_OFF_MASK | \
 				 MPFS_CAN_IER_RXMSG_LOS_MASK | \
 				 MPFS_CAN_IER_TXMSG_SNT_MASK | \
-				 MPFS_CAN_IER_RXMSG_SNT_MASK | \
-				 MPFS_CAN_IER_RTR_SNT_MASK | \
+				 MPFS_CAN_IER_RXMSG_AVAIL_MASK | \
 				 MPFS_CAN_IER_OVR_LOAD_MASK | \
 				 MPFS_CAN_IER_GLOBAL_MASK)
 
@@ -174,13 +172,13 @@ struct mpfs_can_priv {
 
 static const struct can_bittiming_const mpfs_can_bittiming_const = {
 	.name = "mpfs_can",
-	.tseg1_min = 2,
+	.tseg1_min = 3,
 	.tseg1_max = 16,
-	.tseg2_min = 1,
+	.tseg2_min = 2,
 	.tseg2_max = 8,
 	.sjw_max = 4,
-	.brp_min = 0,
-	.brp_max = 32767,
+	.brp_min = 1,
+	.brp_max = 32768,
 	.brp_inc = 1,
 };
 
@@ -216,8 +214,8 @@ static int mpfs_can_set_bittiming(struct net_device *ndev)
 		return -EPERM;
 	}
 
-	/* The TS1, TS2 and buad rate values written in the Config register are
-	 * added to 1 to compute the prescalar.
+	/* The TS1, TS2 and baud rate prescaler values written in the Config register are
+	 * added to 1 to compute the actual value.
 	 * TS1 configuration for the mpfs can includes both propagation seg and phase seg1
 	 */
 	config = FIELD_PREP(MPFS_CAN_BTR_MASK, bt->brp - 1) |
@@ -246,9 +244,6 @@ static int mpfs_can_start(struct net_device *ndev)
 	ret = mpfs_can_set_bittiming(ndev);
 	if (ret < 0)
 		return ret;
-
-	/* Clear pending interrupts */
-	writel(0x0, priv->base + MPFS_CAN_ISR_OFFSET);
 
 	/* Enable interrupts */
 	writel(MPFS_CAN_IER_MASK, priv->base + MPFS_CAN_IER_OFFSET);
@@ -290,7 +285,6 @@ static int mpfs_can_do_set_mode(struct net_device *ndev, enum can_mode mode)
 
 	switch (mode) {
 	case CAN_MODE_START:
-
 		ret = mpfs_can_start(ndev);
 		if (ret < 0) {
 			netdev_err(ndev, "mpfs_can_start() failed!\n");
@@ -399,8 +393,6 @@ static netdev_tx_t mpfs_can_start_xmit(struct sk_buff *skb, struct net_device *n
 	if ((priv->tx_head - priv->tx_tail) == priv->tx_max)
 		netif_stop_queue(ndev);
 
-	netif_stop_queue(ndev);
-
 	spin_unlock_irqrestore(&priv->tx_lock, flags);
 
 	return NETDEV_TX_OK;
@@ -435,6 +427,7 @@ static int mpfs_can_rx(struct net_device *ndev, int buf_off)
 		frame->can_id |= CAN_RTR_FLAG;
 
 	frame->len = (ctrl & MPFS_CAN_DLC_MASK) >> 16;
+	frame->len = can_cc_dlc2len(frame->len);
 
 	data[0] = readl(priv->base + MPFS_CAN_RX_DATAL_OFFSET(buf_off));
 	data[1] = readl(priv->base + MPFS_CAN_RX_DATAH_OFFSET(buf_off));
@@ -493,16 +486,15 @@ static void mpfs_can_set_error_state(struct net_device *ndev, enum can_state new
 	rx_state = txerr <= rxerr ? new_state : 0;
 
 	if (new_state > CAN_STATE_ERROR_PASSIVE) {
-		frame->can_id |= CAN_ERR_CRTL;
-		frame->data[1] = (txerr > rxerr) ?
-				  CAN_ERR_CRTL_TX_PASSIVE : CAN_ERR_CRTL_RX_PASSIVE;
-	} else {
-		can_change_state(ndev, frame, tx_state, rx_state);
+		netdev_err(ndev, "Unexpected bus state %u\n", new_state);
+		return;
+	}
 
-		if (frame) {
-			frame->data[6] = txerr;
-			frame->data[7] = rxerr;
-		}
+	can_change_state(ndev, frame, tx_state, rx_state);
+
+	if (frame) {
+		frame->data[6] = txerr;
+		frame->data[7] = rxerr;
 	}
 }
 
@@ -526,13 +518,8 @@ static void mpfs_can_update_error_state(struct net_device *ndev)
 
 		mpfs_can_set_error_state(ndev, new_state, skb ? cf : NULL);
 
-		if (skb) {
-			struct net_device_stats *stats = &ndev->stats;
-
-			stats->rx_packets++;
-			stats->rx_bytes += cf->len;
+		if (skb)
 			netif_rx(skb);
-		}
 	}
 }
 
@@ -611,9 +598,6 @@ static void mpfs_can_err_interrupt(struct net_device *ndev, u32 int_status)
 
 		if (skb) {
 			frame->can_id |= cf.can_id;
-			memcpy(frame->data, cf.data, CAN_ERR_DLC);
-			stats->rx_packets++;
-			stats->rx_bytes += CAN_ERR_DLC;
 			netif_rx(skb);
 		}
 	}
@@ -637,7 +621,7 @@ static int mpfs_can_rx_poll(struct napi_struct *napi, int quota)
 	if (processed < quota) {
 		if (napi_complete_done(napi, processed)) {
 			int_enable = readl(priv->base + MPFS_CAN_IER_OFFSET);
-			int_enable |= (MPFS_CAN_IER_RXMSG_SNT_MASK);
+			int_enable |= (MPFS_CAN_IER_RXMSG_AVAIL_MASK);
 			writel(int_enable, priv->base + MPFS_CAN_IER_OFFSET);
 		}
 	}
@@ -656,6 +640,23 @@ static void mpfs_can_tx_interrupt(struct net_device *ndev)
 	spin_lock_irqsave(&priv->tx_lock, flags);
 	frames_in_fifo = priv->tx_head - priv->tx_tail;
 
+//TODO can I check this against the # of set bits in TX_BUF_STATUS?
+// [Severity: High]
+// Does this blindly echo frames in FIFO order without checking hardware buffer
+// status? CAN arbitration means multiple queued frames can be transmitted out
+//
+// no, they can't. The hardware transmits 0-31,0-31 etc, so always the order in
+// which linux submitted them.
+//
+// of order based on priority. The TX interrupt handler loops over
+// tx_head - tx_tail and echoes all pending frames unconditionally. If two frames
+// are queued and only the higher-priority one transmits, a single TX interrupt
+// will fire, and the driver will erroneously echo both frames and free them
+// before the second one is actually sent to the bus
+//
+//this is still problematic, clearing all is bad. Can check the number of set
+//bits in TX_BUF_STATUS to see how many frames remain in the fifo and compare it
+//to frames_in_fifo to see how many have been sent.
 	while (frames_in_fifo--) {
 		bytes = can_get_echo_skb(ndev, priv->tx_tail % priv->tx_max, NULL);
 		stats->tx_bytes += bytes;
@@ -686,9 +687,9 @@ static irqreturn_t mpfs_can_interrupt(int irq, void *dev_id)
 	if (isr & MPFS_CAN_ERR_MASK)
 		mpfs_can_err_interrupt(ndev, isr);
 
-	if (isr & MPFS_CAN_ISR_RXMSG_SNT_MASK) {
+	if (isr & MPFS_CAN_ISR_RXMSG_AVAIL_MASK) {
 		ier = readl(priv->base + MPFS_CAN_IER_OFFSET);
-		ier &= ~(MPFS_CAN_IER_RXMSG_SNT_MASK | MPFS_CAN_IER_RTR_SNT_MASK);
+		ier &= ~MPFS_CAN_IER_RXMSG_AVAIL_MASK;
 		writel(ier, priv->base + MPFS_CAN_IER_OFFSET);
 		napi_schedule(&priv->napi);
 	}
@@ -730,13 +731,14 @@ static int mpfs_can_open(struct net_device *ndev)
 	if (ret)
 		goto err_irq;
 
+	napi_enable(&priv->napi);
+
 	ret = mpfs_can_start(ndev);
 	if (ret < 0) {
 		netdev_err(ndev, "mpfs_can_start() failed!\n");
 		goto err_candev;
 	}
 
-	napi_enable(&priv->napi);
 	netif_start_queue(ndev);
 
 	return 0;
@@ -810,19 +812,24 @@ static int mpfs_can_probe(struct platform_device *pdev)
 	spin_lock_init(&priv->tx_lock);
 
 	ndev->irq = platform_get_irq(pdev, 0);
+	if (ndev->irq < 0)
+		return ndev->irq;
+
 	ndev->flags |= IFF_ECHO;
 	ndev->netdev_ops = &mpfs_can_netdev_ops;
 	platform_set_drvdata(pdev, ndev);
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 
-	ret = clk_bulk_get_all(&pdev->dev, &priv->clks);
-	if (ret < 2)
+	priv->num_clocks = devm_clk_bulk_get_all_enabled(&pdev->dev, &priv->clks);
+	if (priv->num_clocks < 0) {
+		ret = priv->num_clocks;
 		goto err_free_candev;
+	}
 
-	priv->num_clocks = ret;
-	ret = clk_bulk_prepare_enable(priv->num_clocks, priv->clks);
-	if (ret)
+	if (priv->num_clocks < 2) {
+		ret = -ENOENT;
 		goto err_free_candev;
+	}
 
 	/* Retrieve the CAN clock rate */
 	priv->can.clock.freq = clk_get_rate(priv->clks[1].clk);
