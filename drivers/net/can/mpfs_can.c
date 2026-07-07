@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 /*
  * Microchip Polarfire SoC MSS CAN controller driver
+ * (Inicore CANmodule-IIIx)
  *
  * Copyright (C) 2023 Microchip Technology Inc. and its subsidiaries
  *
@@ -9,6 +10,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/can/dev.h>
 #include <linux/errno.h>
@@ -150,8 +152,7 @@
 #define MPFS_CAN_AMR_DATA_OFFSET(fifo)		MPFS_CAN_RX_MSG_BASE(MPFS_CAN_RX_MSG_AMR_DATA_BASE, fifo)
 #define MPFS_CAN_ACR_DATA_OFFSET(fifo)		MPFS_CAN_RX_MSG_BASE(MPFS_CAN_RX_MSG_ACR_DATA_BASE, fifo)
 
-#define MPFS_CAN_TX_BUFFERS	32
-#define MPFS_CAN_RX_BUFFERS	32
+#define MPFS_CAN_NUM_BUFFERS	32
 #define MPFS_CAN_AMR_MASK	GENMASK(31, 0)
 #define MPFS_CAN_AMR_DATA_MASK	GENMASK(31, 0)
 
@@ -166,7 +167,6 @@ struct mpfs_can_priv {
 	unsigned long irq_flags;
 	unsigned int tx_head;
 	unsigned int tx_tail;
-	unsigned int tx_max;
 	int num_clocks;
 };
 
@@ -255,7 +255,7 @@ static int mpfs_can_start(struct net_device *ndev)
 
 	writel(val, priv->base + MPFS_CAN_COMMAND_OFFSET);
 
-	for (buf = 0; buf < MPFS_CAN_RX_BUFFERS; buf++)	{
+	for (buf = 0; buf < MPFS_CAN_NUM_BUFFERS; buf++)	{
 		writel(MPFS_CAN_AMR_MASK, priv->base + MPFS_CAN_AMR_OFFSET(buf));
 		writel(0x0, priv->base + MPFS_CAN_ACR_OFFSET(buf));
 
@@ -268,7 +268,7 @@ static int mpfs_can_start(struct net_device *ndev)
 		val = MPFS_CAN_RXMSG_CTRL_CMD_WPNL_MASK | MPFS_CAN_RXMSG_CTRL_CMD_WPNH_MASK |
 		      MPFS_CAN_RXMSG_CTRL_CMD_BUFEN_MASK | MPFS_CAN_RXMSG_CTRL_CMD_RXINTEN_MASK;
 
-		if (buf != (MPFS_CAN_RX_BUFFERS - 1))
+		if (buf != (MPFS_CAN_NUM_BUFFERS - 1))
 			val |= MPFS_CAN_RXMSG_CTRL_CMD_LF_MASK;
 
 		writel(val, priv->base + MPFS_CAN_RX_MSG_CTR_OFFSET(buf));
@@ -320,7 +320,7 @@ static void mpfs_can_tx(struct net_device *ndev, struct sk_buff *skb,
 	ctlr |= FIELD_PREP(MPFS_CAN_DLC_MASK, frame->len) |
 		MPFS_CAN_TXMSG_CTRL_CMD_WPNA_MASK | MPFS_CAN_TXMSG_CTRL_CMD_WPNB_MASK |
 		MPFS_CAN_TXMSG_CTRL_CMD_TXREQ_MASK | MPFS_CAN_TXMSG_CTRL_CMD_TXINTEN_MASK;
-	can_put_echo_skb(skb, ndev, priv->tx_head % priv->tx_max, 0);
+	can_put_echo_skb(skb, ndev, priv->tx_head % MPFS_CAN_NUM_BUFFERS, 0);
 
 	priv->tx_head++;
 	writel(id, priv->base + MPFS_CAN_TX_MSG_ID_OFFSET(buf_off));
@@ -341,7 +341,7 @@ static void mpfs_can_tx(struct net_device *ndev, struct sk_buff *skb,
 
 static int mpfs_can_get_txmsg_index(struct mpfs_can_priv *priv)
 {
-	for (int buf_index = 0; buf_index < MPFS_CAN_TX_BUFFERS; buf_index++) {
+	for (int buf_index = 0; buf_index < MPFS_CAN_NUM_BUFFERS; buf_index++) {
 		int available_txreq;
 
 		available_txreq = readl(priv->base + MPFS_CAN_TX_MSG_CTR_OFFSET(buf_index));
@@ -357,7 +357,7 @@ static int mpfs_can_get_txmsg_index(struct mpfs_can_priv *priv)
 
 static int mpfs_can_get_rxmsg_index(struct mpfs_can_priv *priv)
 {
-	for (int buf_index = 0; buf_index < MPFS_CAN_RX_BUFFERS; buf_index++) {
+	for (int buf_index = 0; buf_index < MPFS_CAN_NUM_BUFFERS; buf_index++) {
 		int available_rxreq;
 
 		available_rxreq = readl(priv->base + MPFS_CAN_RX_MSG_CTR_OFFSET(buf_index));
@@ -390,7 +390,7 @@ static netdev_tx_t mpfs_can_start_xmit(struct sk_buff *skb, struct net_device *n
 	spin_lock_irqsave(&priv->tx_lock, flags);
 	mpfs_can_tx(ndev, skb, buf_off);
 
-	if ((priv->tx_head - priv->tx_tail) == priv->tx_max)
+	if ((priv->tx_head - priv->tx_tail) == MPFS_CAN_NUM_BUFFERS)
 		netif_stop_queue(ndev);
 
 	spin_unlock_irqrestore(&priv->tx_lock, flags);
@@ -631,34 +631,26 @@ static int mpfs_can_rx_poll(struct napi_struct *napi, int quota)
 
 static void mpfs_can_tx_interrupt(struct net_device *ndev)
 {
+	int bytes = 0, frames_submitted, frames_sent, frames_pending;
 	struct mpfs_can_priv *priv = netdev_priv(ndev);
 	struct net_device_stats *stats = &ndev->stats;
-	unsigned int frames_in_fifo;
 	unsigned long flags;
-	int bytes = 0;
 
 	spin_lock_irqsave(&priv->tx_lock, flags);
-	frames_in_fifo = priv->tx_head - priv->tx_tail;
+	frames_submitted = priv->tx_head - priv->tx_tail;
 
-//TODO can I check this against the # of set bits in TX_BUF_STATUS?
-// [Severity: High]
-// Does this blindly echo frames in FIFO order without checking hardware buffer
-// status? CAN arbitration means multiple queued frames can be transmitted out
-//
-// no, they can't. The hardware transmits 0-31,0-31 etc, so always the order in
-// which linux submitted them.
-//
-// of order based on priority. The TX interrupt handler loops over
-// tx_head - tx_tail and echoes all pending frames unconditionally. If two frames
-// are queued and only the higher-priority one transmits, a single TX interrupt
-// will fire, and the driver will erroneously echo both frames and free them
-// before the second one is actually sent to the bus
-//
-//this is still problematic, clearing all is bad. Can check the number of set
-//bits in TX_BUF_STATUS to see how many frames remain in the fifo and compare it
-//to frames_in_fifo to see how many have been sent.
-	while (frames_in_fifo--) {
-		bytes = can_get_echo_skb(ndev, priv->tx_tail % priv->tx_max, NULL);
+	/* The hardware transmits by default in "round robin" mode, rotating
+	 * through the buffers 0-31, 0-31, ignoring priority, (the alternative
+	 * is that lower buffers have more priority).
+	 * Check the number of bits set in TX_BUF_STATUS against how many have
+	 * been submitted to see how many frames have been transmitted.
+	 * In "round robin" mode it shouldn't be possible for out of order
+	 * transmissions, so the oldest submitted frame can be marked complete.
+	 */
+	frames_pending = hweight32(readl(priv->base + MPFS_CAN_TXBUF_STAT_OFFSET));
+	frames_sent = frames_submitted - frames_pending;
+	while (frames_sent--) {
+		bytes = can_get_echo_skb(ndev, priv->tx_tail % MPFS_CAN_NUM_BUFFERS, NULL);
 		stats->tx_bytes += bytes;
 		priv->tx_tail++;
 		stats->tx_packets++;
@@ -791,7 +783,7 @@ static int mpfs_can_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 
-	ndev = alloc_candev(sizeof(struct mpfs_can_priv), MPFS_CAN_TX_BUFFERS);
+	ndev = alloc_candev(sizeof(struct mpfs_can_priv), MPFS_CAN_NUM_BUFFERS);
 	if (!ndev)
 		return -ENOMEM;
 
@@ -801,7 +793,6 @@ static int mpfs_can_probe(struct platform_device *pdev)
 	priv->can.do_set_mode = mpfs_can_do_set_mode;
 	priv->can.do_get_berr_counter = mpfs_can_get_berr_counter;
 	priv->can.ctrlmode_supported = CAN_CTRLMODE_LOOPBACK | CAN_CTRLMODE_BERR_REPORTING;
-	priv->tx_max = MPFS_CAN_TX_BUFFERS;
 
 	priv->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(priv->base)) {
@@ -834,7 +825,7 @@ static int mpfs_can_probe(struct platform_device *pdev)
 	/* Retrieve the CAN clock rate */
 	priv->can.clock.freq = clk_get_rate(priv->clks[1].clk);
 
-	netif_napi_add_weight(ndev, &priv->napi, mpfs_can_rx_poll, MPFS_CAN_RX_BUFFERS);
+	netif_napi_add_weight(ndev, &priv->napi, mpfs_can_rx_poll, MPFS_CAN_NUM_BUFFERS);
 
 	ret = register_candev(ndev);
 	if (ret) {
@@ -844,7 +835,7 @@ static int mpfs_can_probe(struct platform_device *pdev)
 
 	netdev_dbg(ndev, "reg=0x%p irq=%d clock=%d, max tx buffers %d\n",
 		   priv->base, ndev->irq, priv->can.clock.freq,
-		   priv->tx_max);
+		   MPFS_CAN_NUM_BUFFERS);
 
 	return 0;
 
