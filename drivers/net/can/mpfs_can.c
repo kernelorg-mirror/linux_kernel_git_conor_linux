@@ -198,6 +198,9 @@ static int mpfs_can_reset(struct net_device *ndev)
 	priv->tx_head = 0;
 	priv->tx_tail = 0;
 
+	for (int i = 0; i < MPFS_CAN_NUM_BUFFERS; i++)
+		can_free_echo_skb(ndev, i, NULL);
+
 	return 0;
 }
 
