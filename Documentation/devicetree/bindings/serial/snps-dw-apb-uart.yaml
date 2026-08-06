@@ -90,6 +90,7 @@ properties:
               - starfive,jh7100-uart
               - starfive,jh7110-uart
               - syna,sl2610-uart
+              - starfive,jhb100-uart
               - ti,tda54-uart
               - ultrarisc,dp1000-uart
           - const: snps,dw-apb-uart
