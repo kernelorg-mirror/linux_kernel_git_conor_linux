@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/microchip/microchip,mpfs-control-scb.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip PolarFire SoC system-controller bus (SCB) control register region
+
+maintainers:
+  - Conor Dooley <conor.dooley@microchip.com>
+
+description:
+  Register region containing temp/voltage sensors, system controller mailbox
+  config/status registers and other system controller related functionality.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: microchip,mpfs-control-scb
+          - const: syscon
+
+      - items:
+          - const: microchip,pic64gx-control-scb
+          - const: microchip,mpfs-control-scb
+          - const: syscon
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    items:
+      - description: high rising event
+      - description: high falling event
+      - description: low rising event
+      - description: low falling event
+
+  interrupt-clear-gpios:
+    items:
+      - description: high rising clear
+      - description: high falling clear
+      - description: low rising clear
+      - description: low falling clear
+
+dependencies:
+  interrupts: [interrupt-clear-gpios]
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    syscon@37020000 {
+      compatible = "microchip,mpfs-control-scb", "syscon";
+      reg = <0x37020000 0x100>;
+      interrupt-parent = <&plic>;
+      interrupts = <129>, <130>, <131>, <132>;
+      interrupt-clear-gpios = <&gpio2 22 GPIO_ACTIVE_HIGH>,
+                              <&gpio2 23 GPIO_ACTIVE_HIGH>,
+                              <&gpio2 24 GPIO_ACTIVE_HIGH>,
+                              <&gpio2 25 GPIO_ACTIVE_HIGH>;
+    };
+
