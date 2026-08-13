@@ -444,7 +444,7 @@ static irqreturn_t mpfs_tvs_high_rising_handler(int irq, void *d)
 	pr_info("temp: %d\n", val);
 
 	gpiod_set_value(data->clear_gpios->desc[0], 1);
-	udelay(100000); //TODO what's the correct delay? (Ask Brian)
+	udelay(100); //TODO what's the correct delay? (Ask Brian)
 	gpiod_set_value(data->clear_gpios->desc[0], 0);
 
 	//TODO do I want to check the level bit before setting this?
@@ -470,7 +470,7 @@ static irqreturn_t mpfs_tvs_high_falling_handler(int irq, void *d)
 	pr_info("temp: %d\n", val);
 
 	gpiod_set_value(data->clear_gpios->desc[1], 1);
-	udelay(100000);
+	udelay(100);
 	gpiod_set_value(data->clear_gpios->desc[1], 0);
 
 	data->max_alarm = false;
@@ -495,7 +495,7 @@ static irqreturn_t mpfs_tvs_low_rising_handler(int irq, void *d)
 	pr_info("temp: %d\n", val);
 
 	gpiod_set_value(data->clear_gpios->desc[2], 1);
-	udelay(100000);
+	udelay(100);
 	gpiod_set_value(data->clear_gpios->desc[2], 0);
 
 	//TODO do I want to check the level bit before setting this?
@@ -613,6 +613,8 @@ static int mpfs_tvs_probe(struct platform_device *pdev)
 	ret = mpfs_tvs_workaround_probe(pdev, data);
 	if (ret)
 		return ret;
+
+	//TODO add clock
 
 	/*
 	 * It's an MMIO regmap with no resources, there's nothing that can fail
