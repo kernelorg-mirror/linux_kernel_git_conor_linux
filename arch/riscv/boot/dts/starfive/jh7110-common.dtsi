@@ -44,6 +44,7 @@
 
 		led_status_power: led-0 {
 			gpios = <&aongpio 3 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
 		};
 	};
 
