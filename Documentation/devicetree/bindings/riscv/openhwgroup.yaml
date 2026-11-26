@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/riscv/openhwgroup.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: OpenHW Group SoC-based boards
+
+maintainers:
+  - Marouene Boubakri <marouene.boubakri@oss.nxp.com>
+
+description:
+  OpenHW Group SoC-based boards. The CVA6 APU is the FPGA SoC built around
+  the CVA6 core in the CVA6 repository (corev_apu/fpga). As an FPGA design
+  it has no fixed hardware, so its compatibles carry the version of the
+  CVA6 release (https://github.com/openhwgroup/cva6/releases) that the
+  bitstream is built from.
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+      - description: CVA6 APU release v5.3.0 on the Digilent Genesys 2 board
+        items:
+          - enum:
+              - openhwgroup,cv32a6-genesys2-v5.3.0
+              - openhwgroup,cv64a6-genesys2-v5.3.0
+          - const: openhwgroup,cva6-apu-v5.3.0
+
+additionalProperties: true
+
+...
