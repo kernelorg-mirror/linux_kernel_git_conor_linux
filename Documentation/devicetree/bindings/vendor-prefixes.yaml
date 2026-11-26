@@ -1277,6 +1277,8 @@ patternProperties:
     description: OpenCores.org
   "^openembed,.*":
     description: OpenEmbed
+  "^openhwgroup,.*":
+    description: OpenHW Group
   "^openpandora,.*":
     description: OpenPandora GmbH
   "^openrisc,.*":
