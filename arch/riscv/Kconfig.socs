@@ -26,6 +26,11 @@ config ARCH_MICROCHIP
 	help
 	  This enables support for Microchip SoC platforms.
 
+config ARCH_OPENHWGROUP
+	bool "OpenHW Group SoCs"
+	help
+	  This enables support for OpenHW Group SoC platform hardware.
+
 config ARCH_RENESAS
 	bool "Renesas RISC-V SoCs"
 	help
