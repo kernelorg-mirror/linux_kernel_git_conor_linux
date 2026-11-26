@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
+/*
+ * Copyright 2026 NXP
+ *
+ * OpenHW Group CVA6 APU on the Digilent Genesys 2 FPGA board.
+ *
+ * The SoC description is shared between the 32-bit (cv32a6) and the
+ * 64-bit (cv64a6) configurations of the CVA6 core. The core specific
+ * properties and the memory size are set in the board .dts files.
+ */
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		/* The CLINT mtime counter runs at half the core clock */
+		timebase-frequency = <25000000>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			reg = <0>;
+			clocks = <&clk50>;
+			tlb-split;
+
+			cpu0_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+	};
+
+	/*
+	 * Core and peripheral clock. It is an output of an MMCM that the
+	 * bitstream configures for 50 MHz and that has no register interface.
+	 */
+	clk50: clock-50mhz {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <50000000>;
+		clock-output-names = "clk50";
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led-0 {
+			gpios = <&gpio0 1 0>;
+			linux,default-trigger = "heartbeat";
+		};
+	};
+
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "simple-bus";
+		ranges;
+
+		clint: clint@2000000 {
+			compatible = "openhwgroup,cva6-clint", "sifive,clint0";
+			reg = <0x0 0x2000000 0x0 0xc0000>;
+			interrupts-extended = <&cpu0_intc 3>, <&cpu0_intc 7>;
+		};
+
+		plic: interrupt-controller@c000000 {
+			compatible = "openhwgroup,cva6-plic", "sifive,plic-1.0.0";
+			reg = <0x0 0xc000000 0x0 0x4000000>;
+			#address-cells = <0>;
+			#interrupt-cells = <1>;
+			interrupt-controller;
+			interrupts-extended = <&cpu0_intc 11>, <&cpu0_intc 9>;
+			riscv,ndev = <30>;
+		};
+
+		uart0: serial@10000000 {
+			compatible = "ns16550a";
+			reg = <0x0 0x10000000 0x0 0x1000>;
+			clock-frequency = <50000000>;
+			interrupt-parent = <&plic>;
+			interrupts = <1>;
+			/* Registers are 32-bit wide and 32-bit aligned */
+			reg-shift = <2>;
+			reg-io-width = <4>;
+		};
+
+		spi0: spi@20000000 {
+			compatible = "xlnx,xps-spi-2.00.a";
+			reg = <0x0 0x20000000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupt-parent = <&plic>;
+			interrupts = <2>;
+			xlnx,num-ss-bits = <1>;
+			xlnx,num-transfer-bits = <8>;
+
+			mmc@0 {
+				compatible = "mmc-spi-slot";
+				reg = <0>;
+				spi-max-frequency = <12500000>;
+				voltage-ranges = <3300 3300>;
+				disable-wp;
+			};
+		};
+
+		gpio0: gpio@40000000 {
+			compatible = "xlnx,xps-gpio-1.00.a";
+			reg = <0x0 0x40000000 0x0 0x10000>;
+			clocks = <&clk50>;
+			#gpio-cells = <2>;
+			gpio-controller;
+			xlnx,all-inputs = <0>;
+			xlnx,all-inputs-2 = <0>;
+			xlnx,dout-default = <0>;
+			xlnx,dout-default-2 = <0>;
+			xlnx,gpio-width = <8>;
+			xlnx,gpio2-width = <8>;
+			xlnx,interrupt-present = <0>;
+			xlnx,is-dual = <1>;
+			xlnx,tri-default = <0xffffffff>;
+			xlnx,tri-default-2 = <0xffffffff>;
+		};
+	};
+};

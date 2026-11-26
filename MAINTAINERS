@@ -24123,6 +24123,13 @@ T:	git https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git/
 F:	arch/riscv/boot/dts/canaan/
 F:	arch/riscv/boot/dts/sifive/
 
+RISC-V OPENHW GROUP SoC SUPPORT
+M:	Marouene Boubakri <marouene.boubakri@oss.nxp.com>
+L:	linux-riscv@lists.infradead.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/riscv/openhwgroup.yaml
+F:	arch/riscv/boot/dts/openhwgroup/
+
 RISC-V PMU DRIVERS
 M:	Atish Patra <atish.patra@linux.dev>
 R:	Anup Patel <anup@brainfault.org>

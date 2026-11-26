@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
+/*
+ * Copyright 2026 NXP
+ *
+ * OpenHW Group CVA6 APU, 32-bit core (cv32a6), on the Digilent Genesys 2.
+ */
+
+/dts-v1/;
+
+#include "cva6-genesys2.dtsi"
+
+/ {
+	model = "OpenHW Group CVA6 cv32a6 on Digilent Genesys 2";
+	compatible = "openhwgroup,cv32a6-genesys2-v5.3.0",
+		     "openhwgroup,cva6-apu-v5.3.0";
+
+	memory@80000000 {
+		device_type = "memory";
+		/* 128 MiB of DDR3, as configured for this core by the FPGA build */
+		reg = <0x0 0x80000000 0x0 0x8000000>;
+	};
+};
+
+&cpu0 {
+	compatible = "openhwgroup,cv32a6", "riscv";
+	riscv,isa-base = "rv32i";
+	riscv,isa-extensions = "i", "m", "a", "zicntr", "zicsr", "zifencei",
+			       "zihpm";
+	mmu-type = "riscv,sv32";
+};
